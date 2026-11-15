@@ -173,7 +173,9 @@ on:
           - "OnePlus-13T-6.6.89 (A16)"
           - "OnePlus-13R-6.1.118 (A16)"
           - "OnePlus-13R-6.1.141 (A16)"
+          - "OnePlus-13R-6.1.157 (A16)"
           - "OnePlus-15-6.12.23 (A16)"
+          - "OnePlus-15-6.12.58 (A16)"
           - "OnePlus-15T-6.12.38 (A16)"
           - "OnePlus-15R-6.12.38 (A16)"
       ksu_variant:
@@ -186,7 +188,7 @@ on:
           - FinaSU
         default: FinaSU
       build_channel:
-        description: '构建通道（正式=官方 Release 发行版，最新=上游最新构建；FinaSU 最新取 build-manager 构建）'
+        description: '构建通道（正式=官方 Release 发行版，最新=上游最新构建；BakaSU/FinaSU 最新取 build-manager 构建）'
         required: false
         type: choice
         options:
@@ -204,12 +206,17 @@ on:
         type: string
         default: ''
       use_rekernel:
-        description: '启用 Re-Kernel 驱动（默认关闭）'
+        description: '启用 Re-Kernel 驱动'
+        required: false
+        type: boolean
+        default: false
+      use_nomount:
+        description: '启用 NoMount 挂载元模块（需单独刷入配套模块）'
         required: false
         type: boolean
         default: false
       enable_droidspaces_ntsync:
-        description: '启用 Droidspaces 容器 & NTSync（默认关闭）'
+        description: '启用 Droidspaces 容器 & NTSync'
         required: false
         type: boolean
         default: false
@@ -221,6 +228,11 @@ on:
           - O2
           - O3
         default: O2
+      mlgo:
+        description: '启用 ML 编译器优化（regalloc advisor；工具链不支持时自动跳过）'
+        required: false
+        type: boolean
+        default: true
       mirror_toolchains:
         description: '构建前同步工具链（自动检查并补齐缺失缓存，已有缓存时秒级跳过）'
         required: false
@@ -229,7 +241,7 @@ on:
 
 jobs:
   set-matrix:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       model: ${{ steps.set-matrix.outputs.model }}
@@ -366,7 +378,11 @@ jobs:
 
           device=$(jq -c '.' "$config_file")
 
-          # Droidspaces & NTSync 合并开关：默认关闭，不勾选时强制关闭两者
+          # Droidspaces & NTSync 合并开关（复选框，默认不勾选）。
+          # 注意：这里覆写的是容器命名空间组（USER_NS/PID_NS/MACVLAN）与
+          # NTSYNC —— 开机必需的 DEVTMPFS / SYSVIPC / POSIX_MQUEUE / IPC_NS
+          # 在 action 里已改为无条件写入，不再受本开关影响。因此不勾选也能
+          # 正常开机，只是没有容器和 NTSync。
           dn=false
           [ "${{ inputs.enable_droidspaces_ntsync }}" = "true" ] && dn=true
           device=$(echo "$device" | jq -c --argjson dn "$dn" '.ds = $dn | .ntsync = $dn')
@@ -424,7 +440,9 @@ jobs:
               echo "| FinaSU Hook | \`SUSFS Inline\` |"
             fi
             echo "| Re-Kernel | ${{ inputs.use_rekernel && '✅ enabled' || '❌ disabled' }} |"
+            echo "| NoMount | ${{ inputs.use_nomount && '✅ enabled' || '❌ disabled' }} |"
             echo "| Optimization | \`${{ inputs.optimize_level }}\` |"
+            echo "| MLGO | ${{ inputs.mlgo && '✅ enabled' || '❌ disabled' }} |"
             echo "| Droidspaces & NTSync | ${{ inputs.enable_droidspaces_ntsync && '✅ enabled' || '❌ disabled' }} |"
             echo "| Toolchain sync | ${{ inputs.mirror_toolchains && '✅ enabled' || '❌ disabled' }} |"
             echo "| Custom version | \`${{ inputs.custom_version || 'auto (-<android> KMI tag)' }}\` |"
@@ -433,7 +451,7 @@ jobs:
 
   prepare_ccache:
     name: Prepare ccache binary (download once)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Download custom ccache once
         run: |
@@ -635,6 +653,7 @@ jobs:
           ksu_type: ${{ fromJSON(needs.set-matrix.outputs.matrix)[0].ksu_type }}
           ksu_branch_or_hash: ${{ fromJSON(needs.set-matrix.outputs.matrix)[0].ksu_resolved_hash }}
           use_rekernel: ${{ inputs.use_rekernel }}
+          use_nomount: ${{ inputs.use_nomount || false }}
           # BakaSU/FinaSU：内核侧检出到官方最新上传 Manager 构建的同一提交（空=跟随 ksu_branch_or_hash）
           ksu_commit: ${{ needs.get-manager.outputs.ksuCommit }}
           # FinaSU：管理器签名证书（内核第二信任槽对齐用，空=构建时回退 Release APK 提取）
@@ -642,6 +661,7 @@ jobs:
           ksu_cert_hash: ${{ needs.get-manager.outputs.managerCertHash }}
           custom_version: ${{ inputs.custom_version }}
           optimize_level: ${{ inputs.optimize_level }}
+          mlgo: ${{ inputs.mlgo }}
           build_timestamp: ${{ inputs.build_timestamp }}
           cache_stagger: false
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -687,3 +707,4 @@ jobs:
     with:
       ksu_variant: ${{ inputs.ksu_variant }}
       build_channel: ${{ inputs.build_channel }}
+      use_nomount: ${{ inputs.use_nomount || false }}

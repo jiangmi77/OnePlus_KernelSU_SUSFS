@@ -40,7 +40,7 @@ on:
           - FinaSU
         default: FinaSU
       build_channel:
-        description: '构建通道（正式=官方 Release 发行版，最新=上游最新构建；FinaSU 最新取 build-manager 构建）'
+        description: '构建通道（正式=官方 Release 发行版，最新=上游最新构建；BakaSU/FinaSU 最新取 build-manager 构建）'
         required: false
         type: choice
         options:
@@ -48,12 +48,17 @@ on:
           - "最新 (HEAD)"
         default: "正式 (Release)"
       use_rekernel:
-        description: '启用 Re-Kernel 驱动（默认关闭）'
+        description: '启用 Re-Kernel 驱动'
+        required: false
+        type: boolean
+        default: false
+      use_nomount:
+        description: '启用 NoMount 挂载元模块（需单独刷入配套模块）'
         required: false
         type: boolean
         default: false
       enable_droidspaces_ntsync:
-        description: '启用 Droidspaces 容器 & NTSync（默认关闭）'
+        description: '启用 Droidspaces 容器 & NTSync'
         required: false
         type: boolean
         default: false
@@ -63,6 +68,11 @@ on:
         type: choice
         options: [O2, O3]
         default: O2
+      mlgo:
+        description: '启用 ML 编译器优化（regalloc advisor；工具链不支持时自动跳过）'
+        required: false
+        type: boolean
+        default: true
       clean_build:
         description: 'Clean build（不使用 ccache 缓存）'
         type: boolean
@@ -84,7 +94,7 @@ on:
 
 jobs:
   set-op-model:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       device_count: ${{ steps.set-matrix.outputs.count }}
@@ -283,7 +293,10 @@ jobs:
           # Inject ksu_resolved_hash into each device in the matrix
           merged_matrix=$(echo "$merged_matrix" | jq  --arg resolved_sha "$resolved_sha" 'map(.ksu_resolved_hash = $resolved_sha)')
 
-          # Droidspaces & NTSync 合并开关：默认关闭，不勾选时强制关闭两者（与自定义构建一致）
+          # Droidspaces & NTSync 合并开关（复选框，默认不勾选）。
+          # 只控制容器命名空间组（USER_NS/PID_NS/MACVLAN）与 NTSYNC；
+          # 开机必需的 DEVTMPFS / SYSVIPC / POSIX_MQUEUE / IPC_NS 在 action 里
+          # 已改为无条件写入，因此不勾选也能正常开机。
           dn=false
           [ "${{ inputs.enable_droidspaces_ntsync }}" = "true" ] && dn=true
           merged_matrix=$(echo "$merged_matrix" | jq --argjson dn "$dn" 'map(.ds = $dn | .ntsync = $dn)')
@@ -560,7 +573,7 @@ jobs:
 
   prepare_ccache:
     name: Prepare ccache binary (download once)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       # Download the custom ccache binary ONCE for the whole matrix and share it as
       # an artifact. Previously every parallel matrix job curl'd the same GitHub raw
@@ -772,6 +785,7 @@ jobs:
           ksu_type: ${{ matrix.ksu_type }}
           ksu_branch_or_hash: ${{ matrix.ksu_resolved_hash }}
           use_rekernel: ${{ inputs.use_rekernel }}
+          use_nomount: ${{ inputs.use_nomount || false }}
           # BakaSU/FinaSU：内核侧检出到官方最新上传 Manager 构建的同一提交（空=跟随 ksu_branch_or_hash）
           ksu_commit: ${{ needs.get-manager.outputs.ksuCommit }}
           # FinaSU：管理器签名证书（内核第二信任槽对齐用，空=构建时回退 Release APK 提取）
@@ -781,6 +795,7 @@ jobs:
           # （分支头=最新），命中 toolchain-cache 的 susfs-<branch>.tar.gz 归档；
           # 传 SHA 会使缓存 URL 变成 susfs-<40位SHA>.tar.gz 而永远 404
           optimize_level: ${{ inputs.optimize_level }}
+          mlgo: ${{ inputs.mlgo }}
           build_timestamp: ${{ inputs.build_timestamp }}
           clean: ${{ inputs.clean_build }}
           debug: ${{ inputs.debug }}
@@ -860,7 +875,7 @@ jobs:
   # 按构建名称汇总所有失败日志，方便统一下载和定位问题
   collect-build-logs:
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [build]
     steps:
       - name: 下载编译失败日志
@@ -939,10 +954,11 @@ jobs:
     with:
       ksu_variant: ${{ inputs.ksu_variant }}
       build_channel: ${{ inputs.build_channel }}
+      use_nomount: ${{ inputs.use_nomount || false }}
 
   trigger-release:
     needs: [set-op-model, build, get-manager]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: |
       !cancelled() &&
       inputs.release_type != 'Actions' &&
@@ -1020,9 +1036,11 @@ jobs:
           declare -A device_info
           
           # matrix.json holds this build's devices (pre-override config);
-          # ds/ntsync are global overrides, apply them here to match reality
-          ds_flag=${{ inputs.enable_droidspaces_ntsync }}
-          JSON_BUILD_DATA=$(jq -c --argjson dn "$ds_flag" 'map(.ds = $dn | .ntsync = $dn)' ./downloaded-artifacts/matrix.json)
+          # ds/ntsync are global overrides, apply them here to match reality.
+          # 开机必需项不受影响，详见 action 里 Add Droidspaces support 的分层说明。
+          dn=false
+          [ "${{ inputs.enable_droidspaces_ntsync }}" = "true" ] && dn=true
+          JSON_BUILD_DATA=$(jq -c --argjson dn "$dn" 'map(.ds = $dn | .ntsync = $dn)' ./downloaded-artifacts/matrix.json)
           
           for file in $(find downloaded-artifacts -maxdepth 1 -name "*-AnyKernel3.zip" -type f | sort); do
             if [ -f "$file" ]; then
@@ -1044,6 +1062,7 @@ jobs:
           ksu_resolved_hash="${{ needs.set-op-model.outputs.ksu_resolved_hash }}"
           
           OPTIMIZE_LEVEL="${{ inputs.optimize_level }}"
+          MLGO="${{ inputs.mlgo }}"
           CLEAN_BUILD="${{ inputs.clean_build }}"
           
           # Hash map for GKI version
@@ -1172,8 +1191,10 @@ jobs:
           | 挂载方式 | Magic Mount |
           | LTO | thin |
           | Re-Kernel 驱动 | ${{ inputs.use_rekernel && '开启' || '未开启' }} |
+          | NoMount 挂载元模块 | ${{ inputs.use_nomount && '开启' || '未开启' }} |
           | Droidspaces & NTSync | ${{ inputs.enable_droidspaces_ntsync && '开启' || '未开启' }} |
           | 优化级别 | $OPTIMIZE_LEVEL |
+          | MLGO | $( [ "$MLGO" = "true" ] && echo "开启" || echo "未开启" ) |
           | 功能 | $COMMON_FEATURES |
           EOF
           
@@ -1197,6 +1218,7 @@ jobs:
           | \`*-AnyKernel3.zip\` | AnyKernel3 内核刷入包 |
           | \`*.apk\` | Root 管理器 |
           | \`susfs-*.zip\` | SUSFS 配套模块 |
+          | \`nomount-*.zip\` | NoMount 配套元模块 |
 
           > [!IMPORTANT]
           > 刷入前请备份原厂 Boot 镜像。
