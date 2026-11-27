@@ -30,7 +30,7 @@ This repository builds **OnePlus (Oppo/Realme) device kernels** with GitHub Acti
 | Workflow | Purpose | Notes |
 |:---|:---|:---|
 | `build-kernel-release.yml` | Batch build & optional release | Select `A15+16` / `A15` / `A16` or a GKI filter |
-| `oneplus-custom.yml` | Custom single-device build | 157 device versions, custom kernel version name & build time |
+| `oneplus-custom.yml` | Custom single-device build | 158 device versions, custom kernel version name & build time |
 
 ## ✨ Features
 
@@ -40,16 +40,16 @@ This repository builds **OnePlus (Oppo/Realme) device kernels** with GitHub Acti
 | 🔀 Build Manager Channel | Release: latest **stable** upstream Release (tag commit + same-version manager), falls back to the newest official default-branch build when the upstream only ships pre-releases; Latest: SukiSU-Nova/BakaSU pin the default-branch HEAD and pick the newest manager build matching that version, while FinaSU uses the newest `build-manager.yml` build and pins that build's commit |
 | 🙈 SUSFS | Kernel-level hiding working with KSU to complete environment spoofing |
 | 🔔 Re-Kernel | Optional Re-Kernel driver integration |
-| 🧩 NoMount | Optional NoMount VFS path-redirection metamodule; the matching companion module must be flashed separately |
+| 🧷 NoMount | Optional NoMount VFS path-redirection metamodule; the matching companion module must be flashed separately |
 | 🛡️ BBG (Baseband Guard) | LSM-based protection for critical device partitions; abl/efisp whitelist for exploit devices |
 | 🛠️ HMBIRD SCX | Scheduler extensions for SM8750/MT6991 devices |
-| 🌐 Network Enhancement | BBRv1 / BBRv3 congestion control, CAKE & PIE qdisc, IPSet + IPv6 NAT |
+| 🌐 Network Enhancement | BBRv1 / BBRv3 congestion control, CAKE & PIE qdisc, IPSet + IPv6 NAT, TTL target support |
 | ✅ LTO | Link Time Optimisation enabled |
 | 🚀 Optimisation Patches | Memory, I/O, CPU scheduler, network and other general tunings |
-| 🌐 TTL Target Support | Network packet manipulation |
 | ⚡ TMPFS XATTR / POSIX ACL | Extended TMPFS support for meta modules and Mountify |
 | </> Unicode Bypass Fix | Prevent path traversal and other detections using non-printable Unicode codepoints |
 | 🐳 Droidspaces & NTSync | Optional container support with NTSync kernel compatibility |
+| 🔌 Faster SDP charging | Allow 900mA instead of 500mA for (SDP) USB data ports. (Host data port must support 900mA [USB 3.0 ports]) |
 
 ## 🚀 Usage
 
@@ -152,7 +152,7 @@ A commit is a hash string representing the state of a repository at a certain po
 | 工作流 | 用途 | 说明 |
 |:---|:---|:---|
 | `build-kernel-release.yml` | 批量构建 & 可选发布 | 选择 `A15+16` / `A15` / `A16` 或 GKI 过滤 |
-| `oneplus-custom.yml` | 自定义单设备构建 | 157 个设备版本、自定义内核版本名与构建时间 |
+| `oneplus-custom.yml` | 自定义单设备构建 | 158 个设备版本、自定义内核版本名与构建时间 |
 
 ## ✨ 功能特性
 
@@ -162,16 +162,16 @@ A commit is a hash string representing the state of a repository at a certain po
 | 🔀 构建管理器通道 | 正式：上游最新**正式版** Release（标签提交 + 同版本管理器），上游只有预发布版时改用官方默认分支最新上传构建；最新：SukiSU-Nova/BakaSU 锁定默认分支 HEAD 并取与 HEAD 版本一致的最新构建，FinaSU 取最新 `build-manager.yml` 成功构建并锁定该构建提交 |
 | 🙈 SUSFS | 内核级隐藏，配合 KSU 完成环境伪装 |
 | 🔔 Re-Kernel | 可选集成 Re-Kernel 驱动 |
-| 🧩 NoMount | 可选 NoMount VFS 路径重定向挂载元模块；需单独刷入配套模块 |
+| 🧷 NoMount | 可选 NoMount VFS 路径重定向挂载元模块；需单独刷入配套模块 |
 | 🛡️ BBG 基带保护 | 基于 LSM 保护关键设备分区；efisp 漏洞设备可加入 abl/efisp 白名单 |
 | 🛠️ HMBIRD SCX | 适用于 SM8750/MT6991 设备的调度扩展 |
-| 🌐 网络增强 | BBRv1 / BBRv3 拥塞控制、CAKE 与 PIE qdisc、IPSet + IPv6 NAT |
+| 🌐 网络增强 | BBRv1 / BBRv3 拥塞控制、CAKE 与 PIE qdisc、IPSet + IPv6 NAT、TTL 目标支持 |
 | ✅ LTO | 启用链接时优化 |
 | 🚀 优化补丁 | 内存、输入输出、CPU 调度器、网络及其他通用调优 |
-| 🌐 TTL 目标支持 | 网络数据包操作 |
 | ⚡ TMPFS XATTR / POSIX ACL | 扩展 TMPFS 支持，用于元模块与 Mountify |
 | </> Unicode 绕过修复 | 防止使用不可打印的 Unicode 码点进行路径穿越及其他检测 |
 | 🐳 Droidspaces & NTSync | 可选容器支持及 NTSync 内核兼容补丁 |
+| 🔌 Faster SDP charging | 允许 (SDP) USB 数据口使用 900 mA 而非 500 mA（主机数据口需支持 900 mA [USB 3.0 端口]） |
 
 ## 🚀 使用方法
 
